@@ -265,6 +265,7 @@ export interface ConfigParameters {
   bugCommand?: BugCommandSettings;
   model: string;
   maxSessionTurns?: number;
+  newSessionPromptTurnThreshold?: number;
   experimentalZedIntegration?: boolean;
   listSessions?: boolean;
   deleteSession?: string;
@@ -385,6 +386,7 @@ export class Config {
   private inFallbackMode = false;
   private _activeModel: string;
   private readonly maxSessionTurns: number;
+  private readonly newSessionPromptTurnThreshold: number;
   private readonly listSessions: boolean;
   private readonly deleteSession: string | undefined;
   private readonly listExtensions: boolean;
@@ -514,6 +516,8 @@ export class Config {
     this.modelAvailabilityService = new ModelAvailabilityService();
     this.previewFeatures = params.previewFeatures ?? undefined;
     this.maxSessionTurns = params.maxSessionTurns ?? -1;
+    this.newSessionPromptTurnThreshold =
+      params.newSessionPromptTurnThreshold ?? -1;
     this.experimentalZedIntegration =
       params.experimentalZedIntegration ?? false;
     this.listSessions = params.listSessions ?? false;
@@ -1617,6 +1621,13 @@ export class Config {
    */
   getExperiments(): Experiments | undefined {
     return this.experiments;
+  }
+
+  /**
+   * Get new session prompt turn threshold configuration
+   */
+  getNewSessionPromptTurnThreshold(): number {
+    return this.newSessionPromptTurnThreshold;
   }
 
   /**

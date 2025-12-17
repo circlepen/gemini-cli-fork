@@ -409,3 +409,8 @@ export interface ConfirmationRequest {
 export interface LoopDetectionConfirmationRequest {
   onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
 }
+
+export interface NewSessionPromptRequest {
+  turnCount: number;
+  onComplete: (result: { userSelection: 'continue' | 'new_session' }) => void;
+}

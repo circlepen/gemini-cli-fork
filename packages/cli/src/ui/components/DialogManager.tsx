@@ -7,6 +7,7 @@
 import { Box, Text } from 'ink';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js';
+import { NewSessionPromptDialog } from './NewSessionPromptDialog.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
@@ -91,6 +92,14 @@ export const DialogManager = ({
     return (
       <LoopDetectionConfirmation
         onComplete={uiState.loopDetectionConfirmationRequest.onComplete}
+      />
+    );
+  }
+  if (uiState.newSessionPromptRequest) {
+    return (
+      <NewSessionPromptDialog
+        turnCount={uiState.newSessionPromptRequest.turnCount}
+        onComplete={uiState.newSessionPromptRequest.onComplete}
       />
     );
   }

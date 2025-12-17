@@ -20,6 +20,9 @@ vi.mock('../IdeIntegrationNudge.js', () => ({
 vi.mock('./LoopDetectionConfirmation.js', () => ({
   LoopDetectionConfirmation: () => <Text>LoopDetectionConfirmation</Text>,
 }));
+vi.mock('./NewSessionPromptDialog.js', () => ({
+  NewSessionPromptDialog: () => <Text>NewSessionPromptDialog</Text>,
+}));
 vi.mock('./FolderTrustDialog.js', () => ({
   FolderTrustDialog: () => <Text>FolderTrustDialog</Text>,
 }));
@@ -81,6 +84,7 @@ describe('DialogManager', () => {
     isFolderTrustDialogOpen: false,
     shellConfirmationRequest: null,
     loopDetectionConfirmationRequest: null,
+    NewSessionPromptDialog: null,
     confirmationRequest: null,
     isThemeDialogOpen: false,
     isSettingsDialogOpen: false,
@@ -142,6 +146,10 @@ describe('DialogManager', () => {
     [
       { loopDetectionConfirmationRequest: { onComplete: vi.fn() } },
       'LoopDetectionConfirmation',
+    ],
+    [
+      { newSessionPromptRequest: { turnCount: 1, onComplete: vi.fn() } },
+      'NewSessionPromptDialog',
     ],
     [
       { confirmationRequest: { prompt: 'foo', onConfirm: vi.fn() } },

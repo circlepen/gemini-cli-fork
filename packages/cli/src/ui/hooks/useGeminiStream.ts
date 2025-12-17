@@ -39,7 +39,12 @@ import {
   EDIT_TOOL_NAMES,
   processRestorableToolCalls,
 } from '@google/gemini-cli-core';
-import { type Part, type PartListUnion, FinishReason } from '@google/genai';
+import {
+  type Part,
+  type PartListUnion,
+  type Content,
+  FinishReason,
+} from '@google/genai';
 import type {
   HistoryItem,
   HistoryItemWithoutId,
@@ -204,6 +209,13 @@ export const useGeminiStream = (
     setLoopDetectionConfirmationRequest,
   ] = useState<{
     onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
+  } | null>(null);
+
+  // New session prompt state
+  const hasShownSessionPromptRef = useRef(false);
+  const [newSessionPromptRequest, setNewSessionPromptRequest] = useState<{
+    turnCount: number;
+    onComplete: (result: { userSelection: 'continue' | 'new_session' }) => void;
   } | null>(null);
 
   const onExec = useCallback(async (done: Promise<void>) => {
@@ -739,6 +751,34 @@ export const useGeminiStream = (
     [addItem, config],
   );
 
+  //  const handleNewSessionPromptEvent = useCallback(() => {
+  //   setNewSessionPromptRequest({
+  //                     turnCount,
+  //                     onComplete: async (result: {
+  //                       userSelection: 'continue' | 'new_session';
+  //                     }) => {
+  //                       setNewSessionPromptRequest(null);
+  //                       if (result.userSelection === 'new_session') {
+  //                         await geminiClient.resetChat();
+  //                         hasShownSessionPromptRef.current = false;
+  //                       }
+  //                     },
+  //                   });
+  // setNewSessionPromptRequest({
+  //   onComplete: (result: MaxSessionTurnsConfirmationResult) => {
+  //     setMaxSessionTurnsConfirmationRequest(null);
+  //     if (result.userSelection === 'continue') {
+  //       geminiClient.resetTurnCount();
+  //     } else {
+  //       // This is a bit of a hack, but it's the easiest way to
+  //       // trigger a new session from here.
+  //       void handleSlashCommand('/clear');
+  //     }
+  //   },
+  //   maxSessionTurns: config.getMaxSessionTurns(),
+  // });
+  // }, [geminiClient, config, handleSlashCommand]);
+
   const handleContextWindowWillOverflowEvent = useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
@@ -1032,6 +1072,34 @@ export const useGeminiStream = (
             } finally {
               if (activeQueryIdRef.current === queryId) {
                 setIsResponding(false);
+                const threshold = config.getNewSessionPromptTurnThreshold();
+                if (threshold > 0 && !hasShownSessionPromptRef.current) {
+                  const history = geminiClient.getChat().getHistory(true);
+                  // Count turns: each user-model pair is one turn
+                  // Skip the first user content (system context) and count model responses
+                  // This accurately reflects the number of actual Q&A exchanges
+                  const turnCount = history.filter(
+                    (content: Content) => content.role === 'model',
+                  ).length;
+
+                  if (turnCount >= threshold) {
+                    hasShownSessionPromptRef.current = true;
+                    setNewSessionPromptRequest({
+                      turnCount,
+                      onComplete: async (result: {
+                        userSelection: 'continue' | 'new_session';
+                      }) => {
+                        setNewSessionPromptRequest(null);
+                        if (result.userSelection === 'new_session') {
+                          // await geminiClient.resetChat();
+                          await handleSlashCommand('/clear');
+                        } else {
+                          hasShownSessionPromptRef.current = false;
+                        }
+                      },
+                    });
+                  }
+                }
               }
             }
           });
@@ -1051,6 +1119,7 @@ export const useGeminiStream = (
       config,
       startNewPrompt,
       getPromptCount,
+      handleSlashCommand,
     ],
   );
 
@@ -1307,6 +1376,7 @@ export const useGeminiStream = (
     handleApprovalModeChange,
     activePtyId,
     loopDetectionConfirmationRequest,
+    newSessionPromptRequest,
     lastOutputTime,
   };
 };
