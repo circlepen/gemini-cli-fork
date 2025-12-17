@@ -148,6 +148,15 @@ export class GeminiClient {
     this.updateTelemetryTokenCount();
   }
 
+  /**
+   * Resets the session turn counter used for enforcing maxSessionTurns.
+   * This allows the caller (typically the CLI UI) to let the user
+   * continue a long-running conversation after acknowledging a warning.
+   */
+  resetSessionTurnCount(): void {
+    this.sessionTurnCount = 0;
+  }
+
   async resumeChat(
     history: Content[],
     resumedSessionData?: ResumedSessionData,

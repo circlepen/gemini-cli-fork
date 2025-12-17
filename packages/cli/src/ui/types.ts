@@ -409,3 +409,11 @@ export interface ConfirmationRequest {
 export interface LoopDetectionConfirmationRequest {
   onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
 }
+
+export interface MaxSessionTurnsConfirmationResult {
+  userSelection: 'continue' | 'new_session';
+}
+
+export interface MaxSessionTurnsConfirmationRequest {
+  onComplete: (result: MaxSessionTurnsConfirmationResult) => void;
+}

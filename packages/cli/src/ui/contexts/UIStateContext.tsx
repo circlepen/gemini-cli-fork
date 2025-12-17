@@ -12,6 +12,7 @@ import type {
   ShellConfirmationRequest,
   ConfirmationRequest,
   LoopDetectionConfirmationRequest,
+  MaxSessionTurnsConfirmationRequest,
   HistoryItemWithoutId,
   StreamingState,
 } from '../types.js';
@@ -70,6 +71,7 @@ export interface UIState {
   confirmationRequest: ConfirmationRequest | null;
   confirmUpdateExtensionRequests: ConfirmationRequest[];
   loopDetectionConfirmationRequest: LoopDetectionConfirmationRequest | null;
+  maxSessionTurnsConfirmationRequest: MaxSessionTurnsConfirmationRequest | null;
   geminiMdFileCount: number;
   streamingState: StreamingState;
   initError: string | null;

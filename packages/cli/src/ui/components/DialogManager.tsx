@@ -7,6 +7,7 @@
 import { Box, Text } from 'ink';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js';
+import { MaxSessionTurnsDialog } from './MaxSessionTurnsDialog.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
@@ -85,6 +86,14 @@ export const DialogManager = ({
   if (uiState.shellConfirmationRequest) {
     return (
       <ShellConfirmationDialog request={uiState.shellConfirmationRequest} />
+    );
+  }
+  if (uiState.maxSessionTurnsConfirmationRequest) {
+    return (
+      <MaxSessionTurnsDialog
+        maxSessionTurns={settings.merged.model?.maxSessionTurns ?? -1}
+        onComplete={uiState.maxSessionTurnsConfirmationRequest.onComplete}
+      />
     );
   }
   if (uiState.loopDetectionConfirmationRequest) {

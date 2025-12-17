@@ -38,7 +38,14 @@ import {
   runInDevTraceSpan,
   EDIT_TOOL_NAMES,
   processRestorableToolCalls,
+  uiTelemetryService,
+  fireSessionEndHook,
+  fireSessionStartHook,
+  SessionEndReason,
+  SessionStartSource,
+  flushTelemetry,
 } from '@google/gemini-cli-core';
+import { randomUUID } from 'node:crypto';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import type {
   HistoryItem,
@@ -69,6 +76,7 @@ import path from 'node:path';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress } from './useKeypress.js';
 import type { LoadedSettings } from '../../config/settings.js';
+import { setImmediate } from 'node:timers/promises';
 
 enum StreamProcessingStatus {
   Completed,
@@ -92,6 +100,7 @@ export const useGeminiStream = (
   geminiClient: GeminiClient,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
+  clearHistory: UseHistoryManagerReturn['clearItems'],
   config: Config,
   settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
@@ -204,6 +213,13 @@ export const useGeminiStream = (
     setLoopDetectionConfirmationRequest,
   ] = useState<{
     onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
+  } | null>(null);
+
+  const [
+    maxSessionTurnsConfirmationRequest,
+    setMaxSessionTurnsConfirmationRequest,
+  ] = useState<{
+    onComplete: (result: { userSelection: 'continue' | 'new_session' }) => void;
   } | null>(null);
 
   const onExec = useCallback(async (done: Promise<void>) => {
@@ -725,19 +741,139 @@ export const useGeminiStream = (
     [addItem, pendingHistoryItemRef, setPendingHistoryItem],
   );
 
-  const handleMaxSessionTurnsEvent = useCallback(
-    () =>
-      addItem(
-        {
-          type: 'info',
-          text:
-            `The session has reached the maximum number of turns: ${config.getMaxSessionTurns()}. ` +
-            `Please update this limit in your setting.json file.`,
-        },
-        Date.now(),
-      ),
-    [addItem, config],
-  );
+  const handleMaxSessionTurnsEvent = useCallback((): void => {
+    // If a max-session dialog is already open, avoid re-triggering it. This
+    // prevents repeated state updates (and renders) if multiple
+    // MaxSessionTurns events are received for the same turn.
+    if (maxSessionTurnsConfirmationRequest) {
+      return;
+    }
+
+    // Flush any pending history items before showing the dialog.
+    if (pendingHistoryItemRef.current) {
+      addItem(pendingHistoryItemRef.current, Date.now());
+      setPendingHistoryItem(null);
+    }
+
+    setMaxSessionTurnsConfirmationRequest({
+      onComplete: (result: { userSelection: 'continue' | 'new_session' }) => {
+        setMaxSessionTurnsConfirmationRequest(null);
+
+        const geminiClientForSession = config.getGeminiClient();
+
+        if (result.userSelection === 'continue') {
+          // Reset the underlying session turn counter and allow the
+          // user to keep using the current conversation context.
+          if (geminiClientForSession.resetSessionTurnCount) {
+            geminiClientForSession.resetSessionTurnCount();
+          }
+          addItem(
+            {
+              type: MessageType.INFO,
+              text: 'Turn counter reset. Continuing current session.',
+            },
+            Date.now(),
+          );
+
+          // Re-submit the last query that triggered the max-turns warning so
+          // the agent actually continues the user's last input.
+          if (lastQueryRef.current) {
+            const promptIdToUse =
+              lastPromptIdRef.current ??
+              config.getSessionId() + '########' + getPromptCount();
+             
+            submitQuery(
+              lastQueryRef.current,
+              { isContinuation: true },
+              promptIdToUse,
+            );
+          }
+        } else if (result.userSelection === 'new_session') {
+          // Start a new logical session by mirroring the important parts of
+          // the `/clear` command without going through the slash command
+          // pipeline. This avoids potential re-entrancy issues while still
+          // resetting the underlying chat session and telemetry.
+          void (async () => {
+            try {
+              const configForSession = config;
+              const client = configForSession.getGeminiClient();
+              const messageBus = configForSession.getMessageBus();
+
+              if (configForSession.getEnableHooks() && messageBus) {
+                await fireSessionEndHook(messageBus, SessionEndReason.Clear);
+              }
+
+              if (client) {
+                addItem(
+                  {
+                    type: MessageType.INFO,
+                    text: 'Clearing terminal and resetting chat.',
+                  },
+                  Date.now(),
+                );
+                await client.resetChat();
+                if (client.resetSessionTurnCount) {
+                  client.resetSessionTurnCount();
+                }
+                const chatRecordingService =
+                  client.getChatRecordingService?.() ??
+                  client.getChat().getChatRecordingService?.();
+
+                // Start a new conversation recording with a new session ID
+                if (configForSession && chatRecordingService) {
+                  const newSessionId = randomUUID();
+                  configForSession.setSessionId(newSessionId);
+                  chatRecordingService.initialize();
+                }
+              }
+
+              if (configForSession.getEnableHooks() && messageBus) {
+                await fireSessionStartHook(
+                  messageBus,
+                  SessionStartSource.Clear,
+                );
+              }
+
+              // Give telemetry time to flush.
+              await new Promise((resolve) => setImmediate(resolve));
+              await flushTelemetry(configForSession);
+              uiTelemetryService.setLastPromptTokenCount(0);
+
+              // Clear visible history so the user sees a fresh session.
+              clearHistory();
+            } catch (error) {
+              addItem(
+                {
+                  type: MessageType.ERROR,
+                  text:
+                    parseAndFormatApiError(
+                      getErrorMessage(error) ||
+                        'Failed to start a new session.',
+                      config.getContentGeneratorConfig()?.authType,
+                      undefined,
+                      config.getModel(),
+                      DEFAULT_GEMINI_FLASH_MODEL,
+                    ) || 'Failed to start a new session.',
+                },
+                Date.now(),
+              );
+            }
+          })();
+        }
+      },
+    });
+  }, [
+    addItem,
+    config,
+    maxSessionTurnsConfirmationRequest,
+    pendingHistoryItemRef,
+    setPendingHistoryItem,
+    lastQueryRef,
+    lastPromptIdRef,
+    getPromptCount,
+    clearHistory,
+    submitQuery,
+  ]);
 
   const handleContextWindowWillOverflowEvent = useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
@@ -879,7 +1015,7 @@ export const useGeminiStream = (
       query: PartListUnion,
       options?: { isContinuation: boolean },
       prompt_id?: string,
-    ) =>
+    ): Promise<void> =>
       runInDevTraceSpan(
         { name: 'submitQuery' },
         async ({ metadata: spanMetadata }) => {
@@ -988,7 +1124,7 @@ export const useGeminiStream = (
                       );
 
                       if (lastQueryRef.current && lastPromptIdRef.current) {
-                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                         
                         submitQuery(
                           lastQueryRef.current,
                           { isContinuation: true },
@@ -1204,7 +1340,7 @@ export const useGeminiStream = (
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       submitQuery(
         responsesToSend,
         {
@@ -1304,6 +1440,7 @@ export const useGeminiStream = (
     handleApprovalModeChange,
     activePtyId,
     loopDetectionConfirmationRequest,
+    maxSessionTurnsConfirmationRequest,
     lastOutputTime,
   };
 };

@@ -22,8 +22,8 @@ export const clearCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context, _args) => {
-    const geminiClient = context.services.config?.getGeminiClient();
     const config = context.services.config;
+    const geminiClient = config?.getGeminiClient();
     const chatRecordingService = context.services.config
       ?.getGeminiClient()
       ?.getChat()
@@ -40,6 +40,11 @@ export const clearCommand: SlashCommand = {
       // If resetChat fails, the exception will propagate and halt the command,
       // which is the correct behavior to signal a failure to the user.
       await geminiClient.resetChat();
+      // Also reset the session turn counter so maxSessionTurns applies cleanly
+      // to the new session.
+      if (geminiClient.resetSessionTurnCount) {
+        geminiClient.resetSessionTurnCount();
+      }
     } else {
       context.ui.setDebugMessage('Clearing terminal.');
     }
