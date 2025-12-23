@@ -412,5 +412,7 @@ export interface LoopDetectionConfirmationRequest {
 
 export interface NewSessionPromptRequest {
   turnCount: number;
-  onComplete: (result: { userSelection: 'continue' | 'new_session' }) => void;
+  onComplete: (result: {
+    userSelection: 'continue' | 'new_session' | 'compress_session';
+  }) => void;
 }

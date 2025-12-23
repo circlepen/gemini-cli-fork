@@ -167,6 +167,14 @@ export class GeminiClient {
     return this.currentSequenceModel;
   }
 
+  getSessionTurnCount(): number {
+    return this.sessionTurnCount;
+  }
+
+  resetSessionTurnCount() {
+    this.sessionTurnCount = 0;
+  }
+
   async addDirectoryContext(): Promise<void> {
     if (!this.chat) {
       return;

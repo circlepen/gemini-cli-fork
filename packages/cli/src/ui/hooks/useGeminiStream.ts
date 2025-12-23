@@ -39,12 +39,7 @@ import {
   EDIT_TOOL_NAMES,
   processRestorableToolCalls,
 } from '@google/gemini-cli-core';
-import {
-  type Part,
-  type PartListUnion,
-  type Content,
-  FinishReason,
-} from '@google/genai';
+import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import type {
   HistoryItem,
   HistoryItemWithoutId,
@@ -215,8 +210,15 @@ export const useGeminiStream = (
   const hasShownSessionPromptRef = useRef(false);
   const [newSessionPromptRequest, setNewSessionPromptRequest] = useState<{
     turnCount: number;
-    onComplete: (result: { userSelection: 'continue' | 'new_session' }) => void;
+    onComplete: (result: {
+      userSelection: 'continue' | 'new_session' | 'compress_session';
+    }) => void;
   } | null>(null);
+  const handleSlashCommandRef = useRef(handleSlashCommand);
+
+  useEffect(() => {
+    handleSlashCommandRef.current = handleSlashCommand;
+  }, [handleSlashCommand]);
 
   const onExec = useCallback(async (done: Promise<void>) => {
     setIsResponding(true);
@@ -435,9 +437,14 @@ export const useGeminiStream = (
 
         if (!shellModeActive) {
           // Handle UI-only commands first
-          const slashCommandResult = isSlashCommand(trimmedQuery)
-            ? await handleSlashCommand(trimmedQuery)
-            : false;
+          let slashCommandResult: SlashCommandProcessorResult | false = false;
+          if (isSlashCommand(trimmedQuery)) {
+            if (trimmedQuery.startsWith('/clear')) {
+              cancelOngoingRequest();
+              geminiClient.resetSessionTurnCount();
+            }
+            slashCommandResult = await handleSlashCommand(trimmedQuery);
+          }
 
           if (slashCommandResult) {
             switch (slashCommandResult.type) {
@@ -529,6 +536,8 @@ export const useGeminiStream = (
       logger,
       shellModeActive,
       scheduleToolCalls,
+      cancelOngoingRequest,
+      geminiClient,
     ],
   );
 
@@ -1074,25 +1083,29 @@ export const useGeminiStream = (
                 setIsResponding(false);
                 const threshold = config.getNewSessionPromptTurnThreshold();
                 if (threshold > 0 && !hasShownSessionPromptRef.current) {
-                  const history = geminiClient.getChat().getHistory(true);
-                  // Count turns: each user-model pair is one turn
-                  // Skip the first user content (system context) and count model responses
-                  // This accurately reflects the number of actual Q&A exchanges
-                  const turnCount = history.filter(
-                    (content: Content) => content.role === 'model',
-                  ).length;
+                  const sessionTurnCount = geminiClient.getSessionTurnCount();
 
-                  if (turnCount >= threshold) {
+                  if (sessionTurnCount >= threshold) {
                     hasShownSessionPromptRef.current = true;
                     setNewSessionPromptRequest({
-                      turnCount,
+                      turnCount: sessionTurnCount,
                       onComplete: async (result: {
-                        userSelection: 'continue' | 'new_session';
+                        userSelection:
+                          | 'continue'
+                          | 'new_session'
+                          | 'compress_session';
                       }) => {
                         setNewSessionPromptRequest(null);
+                        geminiClient.resetSessionTurnCount();
                         if (result.userSelection === 'new_session') {
-                          // await geminiClient.resetChat();
-                          await handleSlashCommand('/clear');
+                          hasShownSessionPromptRef.current = false;
+                          cancelOngoingRequest();
+                          await handleSlashCommandRef.current('/clear');
+                        } else if (
+                          result.userSelection === 'compress_session'
+                        ) {
+                          hasShownSessionPromptRef.current = false;
+                          await handleSlashCommandRef.current('/compress');
                         } else {
                           hasShownSessionPromptRef.current = false;
                         }
@@ -1119,7 +1132,7 @@ export const useGeminiStream = (
       config,
       startNewPrompt,
       getPromptCount,
-      handleSlashCommand,
+      cancelOngoingRequest,
     ],
   );
 

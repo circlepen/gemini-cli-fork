@@ -32,6 +32,7 @@ import { useSettings } from '../contexts/SettingsContext.js';
 import process from 'node:process';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js';
+import { ApprovalMode } from '@google/gemini-cli-core';
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -96,9 +97,11 @@ export const DialogManager = ({
     );
   }
   if (uiState.newSessionPromptRequest) {
+    const isYoloMode = config.getApprovalMode() === ApprovalMode.YOLO;
     return (
       <NewSessionPromptDialog
         turnCount={uiState.newSessionPromptRequest.turnCount}
+        isYoloMode={isYoloMode}
         onComplete={uiState.newSessionPromptRequest.onComplete}
       />
     );

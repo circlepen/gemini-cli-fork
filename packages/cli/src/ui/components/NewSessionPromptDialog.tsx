@@ -11,16 +11,18 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { theme } from '../semantic-colors.js';
 
 export type NewSessionPromptResult = {
-  userSelection: 'continue' | 'new_session';
+  userSelection: 'continue' | 'new_session' | 'compress_session';
 };
 
 interface NewSessionPromptDialogProps {
   turnCount: number;
+  isYoloMode: boolean;
   onComplete: (result: NewSessionPromptResult) => void;
 }
 
 export function NewSessionPromptDialog({
   turnCount,
+  isYoloMode,
   onComplete,
 }: NewSessionPromptDialogProps) {
   useKeypress(
@@ -40,15 +42,26 @@ export function NewSessionPromptDialog({
       value: {
         userSelection: 'continue',
       },
-      key: 'Continue current session (esc)',
+      key: 'continue',
     },
     {
       label: 'Start new session',
       value: {
         userSelection: 'new_session',
       },
-      key: 'Start new session',
+      key: 'new_session',
     },
+    ...(!isYoloMode
+      ? [
+          {
+            label: 'Compress session',
+            value: {
+              userSelection: 'compress_session',
+            } as NewSessionPromptResult,
+            key: 'compress_session',
+          },
+        ]
+      : []),
   ];
 
   return (
